@@ -77,14 +77,15 @@
   </div>
   <div id="heard-box" style="display:none">
     <div data-t="label_heard"></div>
-    <div id="heard" style="font-size:32px;font-weight:bold;margin:8px 0 16px"></div>
+    <div id="heard" style="font-size:32px;font-weight:bold;margin:8px 0 8px"></div>
+    <div id="match" style="font-size:22px;font-weight:bold;margin:0 0 16px"></div>
   </div>
   <button class="btn" id="btn-next" data-t="btn_next"></button>
   <button class="btn off" id="btn-back" data-t="btn_back"></button>
 </div>
 
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v6</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v7</small></div>
 
 <script>
   var T = {};            // сюда загрузятся тексты из lang/ru.json
@@ -188,6 +189,36 @@
     document.getElementById('rec-state').textContent = T.state_recording;
   };
 
+
+  // ---------- Сравнение с целевым словом ----------
+  function norm(t) {
+    return t.toLowerCase().replace(/ё/g, 'е').replace(/[^а-я\s]/g, ' ').trim();
+  }
+  function lev(a, b) {            // сколько букв нужно изменить, чтобы из a получить b
+    var d = [], i, j;
+    for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+    for (j = 1; j <= b.length; j++) { d[0][j] = j; }
+    for (i = 1; i <= a.length; i++) {
+      for (j = 1; j <= b.length; j++) {
+        d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1,
+                           d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+      }
+    }
+    return d[a.length][b.length];
+  }
+  // «Похоже», если какое-то услышанное слово совпало с целевым (или допустимым) на 80% и больше
+  function isMatch(heardText, w) {
+    var targets = [w.word].concat(w.accepted || []);
+    var tokens = norm(heardText).split(/\s+/).filter(Boolean);
+    for (var i = 0; i < tokens.length; i++) {
+      for (var j = 0; j < targets.length; j++) {
+        var sim = 1 - lev(tokens[i], targets[j]) / Math.max(tokens[i].length, targets[j].length);
+        if (sim >= 0.8) return true;
+      }
+    }
+    return false;
+  }
+
   // ---------- Нейросеть Whisper (распознавание речи) ----------
   var asrPromise = null;
 
@@ -248,6 +279,10 @@
       var out = await asr(audio, { language: 'russian', task: 'transcribe' });
       var sec = ((performance.now() - t0) / 1000).toFixed(1);
       document.getElementById('heard').textContent = (out.text || '').trim() || '—';
+      var ok = isMatch(out.text || '', words[idx]);
+      var mEl = document.getElementById('match');
+      mEl.textContent = ok ? '✅ ' + T.match_yes : '❔ ' + T.match_no;
+      mEl.style.color = ok ? '#1e8e3e' : '#e37400';
       document.getElementById('heard-box').style.display = 'block';
       rs.textContent = '⏱ ' + sec + ' c';
     } catch (e) {
