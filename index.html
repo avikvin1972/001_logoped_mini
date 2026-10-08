@@ -57,6 +57,7 @@
 <!-- Экран 4: меню -->
 <div class="screen" id="s-menu">
   <h2 data-t="menu_title"></h2>
+  <div id="menu-note" style="color:#1e8e3e;font-size:20px;min-height:28px;margin-bottom:8px"></div>
   <button class="btn" id="btn-sounds" data-t="menu_sounds"></button>
   <button class="btn off" data-t="menu_tempo"></button>
   <button class="btn off" data-t="menu_phonemic"></button>
@@ -143,13 +144,13 @@
   }
 
   document.getElementById('btn-sounds').onclick = function () {
-    idx = 0; show('s-task'); showWord();
+    idx = 0; document.getElementById('menu-note').textContent = ''; show('s-task'); showWord();
   };
   document.getElementById('btn-back').onclick = function () { show('s-menu'); };
 
   document.getElementById('btn-next').onclick = function () {
     if (idx < words.length - 1) { idx++; showWord(); }
-    else { document.getElementById('note').textContent = T.task_done; show('s-menu'); document.getElementById('note').textContent = T.task_done; }
+    else { show('s-menu'); document.getElementById('menu-note').textContent = '✅ ' + T.task_done; }
   };
 
   var recBtn = document.getElementById('btn-rec');
