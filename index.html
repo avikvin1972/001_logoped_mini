@@ -108,9 +108,18 @@
 </div>
 
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v9</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v9b</small></div>
 
 <script>
+  var DEFAULTS = {
+    summary_rated: 'Оценено врачом: {k}',
+    summary_note: 'Совпадение: нейросеть сказала «похоже» и врач выбрал «нормативно», либо нейросеть сказала «не похоже» и врач выбрал «искажённо» или «неверно».',
+    btn_export_csv: 'Сохранить таблицу (CSV)',
+    btn_clear: 'Удалить все записи',
+    confirm_clear: 'Удалить все записи с этого устройства? Это нельзя отменить.',
+    msg_model_ready: '✅ Нейросеть готова',
+    err_asr: 'Не удалось распознать: '
+  };
   var T = {};            // сюда загрузятся тексты из lang/ru.json
   var state = { lang: 'ru', age: null };
 
@@ -131,7 +140,7 @@
   // Загрузка текстов, затем запуск
   fetch('lang/ru.json')
     .then(function (r) { return r.json(); })
-    .then(function (data) { T = data; applyTexts(); })
+    .then(function (data) { T = Object.assign({}, DEFAULTS, data); applyTexts(); })
     .catch(function () { document.getElementById('note').textContent = 'Не удалось загрузить тексты (lang/ru.json)'; });
 
   // Кнопки
@@ -299,15 +308,18 @@
   function today() { return new Date().toISOString().slice(0, 10); }
 
   async function showSummary() {
-    var recs = await dbAll();
-    var rated = recs.filter(function (r) { return r.doctor !== null && r.doctor !== undefined; });
-    var agree = rated.filter(function (r) { return r.modelMatch === (r.doctor === 2); }).length;
-    document.getElementById('sum-count').textContent = T.summary_count.replace('{n}', recs.length);
-    document.getElementById('sum-rated').textContent = T.summary_rated.replace('{k}', rated.length);
-    document.getElementById('sum-agree').textContent = rated.length
-      ? T.summary_agree.replace('{p}', Math.round(100 * agree / rated.length))
-      : T.summary_agree.replace('{p}', '—');
     show('s-summary');
+    try {
+      var recs = await dbAll();
+      var rated = recs.filter(function (r) { return r.doctor !== null && r.doctor !== undefined; });
+      var agree = rated.filter(function (r) { return r.modelMatch === (r.doctor === 2); }).length;
+      document.getElementById('sum-count').textContent = T.summary_count.replace('{n}', recs.length);
+      document.getElementById('sum-rated').textContent = T.summary_rated.replace('{k}', rated.length);
+      document.getElementById('sum-agree').textContent = T.summary_agree.replace('{p}',
+        rated.length ? Math.round(100 * agree / rated.length) : '—');
+    } catch (e) {
+      document.getElementById('sum-count').textContent = 'Ошибка: ' + (e.message || e);
+    }
   }
   document.getElementById('btn-summary').onclick = showSummary;
   document.getElementById('btn-sum-back').onclick = function () { show('s-menu'); };
