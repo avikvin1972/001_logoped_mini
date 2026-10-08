@@ -65,6 +65,7 @@
   <button class="btn" id="btn-sounds" data-t="menu_sounds"></button>
   <button class="btn off" data-t="menu_tempo"></button>
   <button class="btn off" data-t="menu_phonemic"></button>
+  <button class="btn" id="btn-summary" data-t="summary_title"></button>
 </div>
 
 <!-- Экран 5: задание -->
@@ -93,8 +94,21 @@
   <button class="btn off" id="btn-back" data-t="btn_back"></button>
 </div>
 
+<!-- Экран 6: сводка -->
+<div class="screen" id="s-summary">
+  <h2 data-t="summary_title"></h2>
+  <div id="sum-count" style="font-size:22px;margin:8px 0"></div>
+  <div id="sum-rated" style="font-size:22px;margin:8px 0"></div>
+  <div id="sum-agree" style="font-size:26px;font-weight:bold;margin:12px 0"></div>
+  <p class="text" style="font-size:15px;color:#5b6784" data-t="summary_note"></p>
+  <button class="btn" id="btn-export" data-t="btn_export"></button>
+  <button class="btn" id="btn-export-csv" data-t="btn_export_csv"></button>
+  <button class="btn off" id="btn-clear" data-t="btn_clear"></button>
+  <button class="btn off" id="btn-sum-back" data-t="btn_back"></button>
+</div>
+
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v8</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v9</small></div>
 
 <script>
   var T = {};            // сюда загрузятся тексты из lang/ru.json
@@ -252,6 +266,86 @@
       });
     };
   });
+
+
+  // ---------- Сводка и экспорт ----------
+  function dbAll() {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var r = db.transaction('records').objectStore('records').getAll();
+        r.onsuccess = function () { resolve(r.result); };
+        r.onerror = function () { reject(r.error); };
+      });
+    });
+  }
+  function dbClear() {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('records', 'readwrite');
+        tx.objectStore('records').clear();
+        tx.oncomplete = resolve;
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  function download(name, blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  function today() { return new Date().toISOString().slice(0, 10); }
+
+  async function showSummary() {
+    var recs = await dbAll();
+    var rated = recs.filter(function (r) { return r.doctor !== null && r.doctor !== undefined; });
+    var agree = rated.filter(function (r) { return r.modelMatch === (r.doctor === 2); }).length;
+    document.getElementById('sum-count').textContent = T.summary_count.replace('{n}', recs.length);
+    document.getElementById('sum-rated').textContent = T.summary_rated.replace('{k}', rated.length);
+    document.getElementById('sum-agree').textContent = rated.length
+      ? T.summary_agree.replace('{p}', Math.round(100 * agree / rated.length))
+      : T.summary_agree.replace('{p}', '—');
+    show('s-summary');
+  }
+  document.getElementById('btn-summary').onclick = showSummary;
+  document.getElementById('btn-sum-back').onclick = function () { show('s-menu'); };
+
+  // Полная выгрузка (JSON, звук внутри в виде текста base64)
+  document.getElementById('btn-export').onclick = async function () {
+    var recs = await dbAll();
+    var out = [];
+    for (var i = 0; i < recs.length; i++) {
+      var r = Object.assign({}, recs[i]);
+      if (r.audio) {
+        r.audio = await new Promise(function (res) {
+          var fr = new FileReader();
+          fr.onload = function () { res(fr.result); };
+          fr.readAsDataURL(recs[i].audio);
+        });
+      }
+      out.push(r);
+    }
+    download('logoped_zapisi_' + today() + '.json',
+             new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+  };
+
+  // Таблица для врача (CSV открывается в Excel и Google Таблицах)
+  document.getElementById('btn-export-csv').onclick = async function () {
+    var recs = await dbAll();
+    function q(v) { return '"' + String(v === null || v === undefined ? '' : v).replace(/"/g, '""') + '"'; }
+    var lines = ['код;дата;слово;услышала нейросеть;модель (1=похоже);врач (2/1/0);возраст;язык'];
+    recs.forEach(function (r) {
+      lines.push([r.code, r.date, r.word, r.heard, r.modelMatch ? 1 : 0, r.doctor, r.ageGroup, r.lang].map(q).join(';'));
+    });
+    download('logoped_tablica_' + today() + '.csv',
+             new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  };
+
+  document.getElementById('btn-clear').onclick = async function () {
+    if (confirm(T.confirm_clear)) { await dbClear(); showSummary(); }
+  };
 
   // ---------- Сравнение с целевым словом ----------
   function norm(t) {
