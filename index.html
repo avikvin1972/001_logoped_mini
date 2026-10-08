@@ -84,7 +84,7 @@
 </div>
 
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v5</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v6</small></div>
 
 <script>
   var T = {};            // сюда загрузятся тексты из lang/ru.json
@@ -197,23 +197,26 @@
       var ms = document.getElementById('model-state');
       ms.textContent = T.msg_model_loading;
       asrPromise = (async function () {
-        var m = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
         function onProgress(p) {
           if (p.status === 'progress' && p.progress != null) {
             ms.textContent = T.msg_model_loading + ' ' + Math.round(p.progress) + '%';
           }
         }
-        var asr;
-        try {
-          // облегчённая версия модели (q8): меньше размер, совместима с телефонами
-          asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base',
-                                 { dtype: 'q8', progress_callback: onProgress });
-        } catch (e1) {
-          // запасной вариант: полная версия (тяжелее, около 290 МБ)
-          asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base',
-                                 { dtype: 'fp32', progress_callback: onProgress });
+        // Пробуем по очереди: [версия библиотеки, вариант модели]
+        var attempts = [['3', 'q8'], ['3', 'fp32'], ['4.2.0', 'fp32']];
+        var errs = [], asr = null, used = '';
+        for (var i = 0; i < attempts.length && !asr; i++) {
+          try {
+            var m = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@' + attempts[i][0]);
+            asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base',
+                                   { dtype: attempts[i][1], progress_callback: onProgress });
+            used = 'v' + attempts[i][0] + ' ' + attempts[i][1];
+          } catch (e) {
+            errs.push('[' + attempts[i][0] + ' ' + attempts[i][1] + '] ' + String(e.message || e).slice(0, 110));
+          }
         }
-        ms.textContent = T.msg_model_ready;
+        if (!asr) throw new Error(errs.join(' | '));
+        ms.textContent = T.msg_model_ready + ' (' + used + ')';
         return asr;
       })();
       asrPromise.catch(function (e) {
