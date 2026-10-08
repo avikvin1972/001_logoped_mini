@@ -84,7 +84,7 @@
 </div>
 
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v4</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v5</small></div>
 
 <script>
   var T = {};            // сюда загрузятся тексты из lang/ru.json
@@ -198,18 +198,26 @@
       ms.textContent = T.msg_model_loading;
       asrPromise = (async function () {
         var m = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
-        var asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
-          progress_callback: function (p) {
-            if (p.status === 'progress' && p.progress != null) {
-              ms.textContent = T.msg_model_loading + ' ' + Math.round(p.progress) + '%';
-            }
+        function onProgress(p) {
+          if (p.status === 'progress' && p.progress != null) {
+            ms.textContent = T.msg_model_loading + ' ' + Math.round(p.progress) + '%';
           }
-        });
+        }
+        var asr;
+        try {
+          // облегчённая версия модели (q8): меньше размер, совместима с телефонами
+          asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base',
+                                 { dtype: 'q8', progress_callback: onProgress });
+        } catch (e1) {
+          // запасной вариант: полная версия (тяжелее, около 290 МБ)
+          asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base',
+                                 { dtype: 'fp32', progress_callback: onProgress });
+        }
         ms.textContent = T.msg_model_ready;
         return asr;
       })();
       asrPromise.catch(function (e) {
-        document.getElementById('model-state').textContent = T.err_asr + (e.message || e);
+        document.getElementById('model-state').textContent = (T.err_asr || 'Ошибка: ') + (e.message || e);
         asrPromise = null;
       });
     }
@@ -240,7 +248,7 @@
       document.getElementById('heard-box').style.display = 'block';
       rs.textContent = '⏱ ' + sec + ' c';
     } catch (e) {
-      rs.textContent = T.err_asr + (e.message || e);
+      rs.textContent = (T.err_asr || 'Ошибка: ') + (e.message || e);
     }
     recBtn.disabled = false;
   }
