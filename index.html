@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Домашний логопед</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: sans-serif; background: #f4f8ff; color: #1a2540; }
+  .screen { display: none; min-height: 100vh; padding: 24px 20px 70px; text-align: center; }
+  .screen.active { display: block; }
+  h1, h2 { margin: 12px 0 24px; }
+  .btn { display: block; width: 100%; max-width: 380px; margin: 14px auto; padding: 20px;
+         font-size: 22px; border: 0; border-radius: 16px; background: #2d7ff9; color: #fff; }
+  .btn.off { background: #c4cbd8; color: #fff; }
+  .btn:disabled { background: #c4cbd8; }
+  .text { max-width: 380px; margin: 0 auto 20px; font-size: 18px; line-height: 1.4; text-align: left; }
+  label { display: block; max-width: 380px; margin: 0 auto 20px; font-size: 18px; text-align: left; }
+  input[type=checkbox] { width: 24px; height: 24px; vertical-align: middle; margin-right: 10px; }
+  #disclaimer { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px; text-align: center;
+                background: #fff3cd; font-size: 15px; border-top: 1px solid #e6d9a0; }
+  #pic { font-size: 120px; line-height: 1.2; min-height: 150px; }
+  #pic img { max-height: 140px; }
+  #counter { color: #5b6784; font-size: 16px; }
+  #rec-state { min-height: 28px; font-size: 18px; margin-bottom: 8px; }
+  .btn.recording { background: #d93025; }
+  audio { width: 100%; max-width: 380px; margin: 8px 0 16px; }
+  #note { max-width: 380px; margin: 10px auto; color: #b3261e; min-height: 24px; }
+</style>
+</head>
+<body>
+
+<!-- Экран 1: язык -->
+<div class="screen active" id="s-lang">
+  <h1 data-t="app_title"></h1>
+  <h2 data-t="lang_title"></h2>
+  <button class="btn" id="btn-ru" data-t="lang_ru"></button>
+  <button class="btn off" data-t="lang_uz_soon" disabled></button>
+</div>
+
+<!-- Экран 2: согласие -->
+<div class="screen" id="s-consent">
+  <h2 data-t="consent_title"></h2>
+  <p class="text" data-t="consent_text"></p>
+  <label><input type="checkbox" id="chk"><span data-t="consent_check"></span></label>
+  <button class="btn" id="btn-consent" data-t="btn_continue" disabled></button>
+</div>
+
+<!-- Экран 3: возраст -->
+<div class="screen" id="s-age">
+  <h2 data-t="age_title"></h2>
+  <button class="btn off" data-age="1" data-t="age_1"></button>
+  <button class="btn" data-age="2" data-t="age_2"></button>
+  <button class="btn off" data-age="3" data-t="age_3"></button>
+</div>
+
+<!-- Экран 4: меню -->
+<div class="screen" id="s-menu">
+  <h2 data-t="menu_title"></h2>
+  <button class="btn" id="btn-sounds" data-t="menu_sounds"></button>
+  <button class="btn off" data-t="menu_tempo"></button>
+  <button class="btn off" data-t="menu_phonemic"></button>
+</div>
+
+<!-- Экран 5: задание -->
+<div class="screen" id="s-task">
+  <div id="counter"></div>
+  <div id="pic"></div>
+  <h2 data-t="task_prompt"></h2>
+  <button class="btn" id="btn-rec" data-t="btn_record"></button>
+  <div id="rec-state"></div>
+  <div id="play-box" style="display:none">
+    <div data-t="label_your_record"></div>
+    <audio id="player" controls></audio>
+  </div>
+  <button class="btn" id="btn-next" data-t="btn_next"></button>
+  <button class="btn off" id="btn-back" data-t="btn_back"></button>
+</div>
+
+<div id="note"></div>
+<div id="disclaimer" data-t="disclaimer"></div>
+
+<script>
+  var T = {};            // сюда загрузятся тексты из lang/ru.json
+  var state = { lang: 'ru', age: null };
+
+  // Показать нужный экран
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active'); });
+    document.getElementById(id).classList.add('active');
+    document.getElementById('note').textContent = '';
+  }
+
+  // Подставить тексты во все элементы с атрибутом data-t
+  function applyTexts() {
+    document.querySelectorAll('[data-t]').forEach(function (el) {
+      el.textContent = T[el.getAttribute('data-t')] || el.getAttribute('data-t');
+    });
+  }
+
+  // Загрузка текстов, затем запуск
+  fetch('lang/ru.json')
+    .then(function (r) { return r.json(); })
+    .then(function (data) { T = data; applyTexts(); })
+    .catch(function () { document.getElementById('note').textContent = 'Не удалось загрузить тексты (lang/ru.json)'; });
+
+  // Кнопки
+  document.getElementById('btn-ru').onclick = function () { state.lang = 'ru'; show('s-consent'); };
+
+  document.getElementById('chk').onchange = function () {
+    document.getElementById('btn-consent').disabled = !this.checked;
+  };
+  document.getElementById('btn-consent').onclick = function () { show('s-age'); };
+
+  document.querySelectorAll('[data-age]').forEach(function (b) {
+    b.onclick = function () {
+      if (b.getAttribute('data-age') !== '2') return;   // пока работает только 5–7
+      state.age = 2;
+      show('s-menu');
+    };
+  });
+
+
+  // ---------- Задание: слово, картинка, запись ----------
+  var words = [];
+  var idx = 0;
+  var recorder = null, chunks = [], stream = null;
+  var lastBlob = null;          // последняя запись (пока только в памяти)
+
+  fetch('words.json').then(function (r) { return r.json(); }).then(function (d) { words = d; });
+
+  function showWord() {
+    var w = words[idx];
+    var pic = document.getElementById('pic');
+    pic.innerHTML = '';
+    if (w.img) { var im = document.createElement('img'); im.src = w.img; pic.appendChild(im); }
+    else { pic.textContent = w.pic; }
+    document.getElementById('counter').textContent =
+      T.task_counter.replace('{i}', idx + 1).replace('{n}', words.length);
+    document.getElementById('play-box').style.display = 'none';
+    document.getElementById('rec-state').textContent = '';
+    lastBlob = null;
+  }
+
+  document.getElementById('btn-sounds').onclick = function () {
+    idx = 0; show('s-task'); showWord();
+  };
+  document.getElementById('btn-back').onclick = function () { show('s-menu'); };
+
+  document.getElementById('btn-next').onclick = function () {
+    if (idx < words.length - 1) { idx++; showWord(); }
+    else { document.getElementById('note').textContent = T.task_done; show('s-menu'); document.getElementById('note').textContent = T.task_done; }
+  };
+
+  var recBtn = document.getElementById('btn-rec');
+  recBtn.onclick = async function () {
+    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }   // второе нажатие = стоп
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      document.getElementById('rec-state').textContent = T.err_mic;
+      return;
+    }
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = function (e) { chunks.push(e.data); };
+    recorder.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });          // выключаем микрофон
+      lastBlob = new Blob(chunks, { type: recorder.mimeType });
+      var player = document.getElementById('player');
+      player.src = URL.createObjectURL(lastBlob);
+      document.getElementById('play-box').style.display = 'block';
+      recBtn.textContent = T.btn_record;
+      recBtn.classList.remove('recording');
+      document.getElementById('rec-state').textContent = '';
+    };
+    recorder.start();
+    recBtn.textContent = T.btn_stop;
+    recBtn.classList.add('recording');
+    document.getElementById('rec-state').textContent = T.state_recording;
+  };
+</script>
+</body>
+</html>
