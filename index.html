@@ -66,6 +66,7 @@
 <!-- Экран 5: задание -->
 <div class="screen" id="s-task">
   <div id="counter"></div>
+  <div id="model-state" style="color:#5b6784;font-size:15px;min-height:20px"></div>
   <div id="pic"></div>
   <h2 data-t="task_prompt"></h2>
   <button class="btn" id="btn-rec" data-t="btn_record"></button>
@@ -74,12 +75,16 @@
     <div data-t="label_your_record"></div>
     <audio id="player" controls></audio>
   </div>
+  <div id="heard-box" style="display:none">
+    <div data-t="label_heard"></div>
+    <div id="heard" style="font-size:32px;font-weight:bold;margin:8px 0 16px"></div>
+  </div>
   <button class="btn" id="btn-next" data-t="btn_next"></button>
   <button class="btn off" id="btn-back" data-t="btn_back"></button>
 </div>
 
 <div id="note"></div>
-<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v3</small></div>
+<div id="disclaimer"><span data-t="disclaimer"></span> <small style="color:#999">v4</small></div>
 
 <script>
   var T = {};            // сюда загрузятся тексты из lang/ru.json
@@ -139,12 +144,13 @@
     document.getElementById('counter').textContent =
       T.task_counter.replace('{i}', idx + 1).replace('{n}', words.length);
     document.getElementById('play-box').style.display = 'none';
+    document.getElementById('heard-box').style.display = 'none';
     document.getElementById('rec-state').textContent = '';
     lastBlob = null;
   }
 
   document.getElementById('btn-sounds').onclick = function () {
-    idx = 0; document.getElementById('menu-note').textContent = ''; show('s-task'); showWord();
+    idx = 0; document.getElementById('menu-note').textContent = ''; show('s-task'); showWord(); loadAsr();
   };
   document.getElementById('btn-back').onclick = function () { show('s-menu'); };
 
@@ -174,12 +180,70 @@
       recBtn.textContent = T.btn_record;
       recBtn.classList.remove('recording');
       document.getElementById('rec-state').textContent = '';
+      recognize(lastBlob);
     };
     recorder.start();
     recBtn.textContent = T.btn_stop;
     recBtn.classList.add('recording');
     document.getElementById('rec-state').textContent = T.state_recording;
   };
+
+  // ---------- Нейросеть Whisper (распознавание речи) ----------
+  var asrPromise = null;
+
+  // Загружаем модель один раз; браузер запоминает её, в следующий раз быстрее
+  function loadAsr() {
+    if (!asrPromise) {
+      var ms = document.getElementById('model-state');
+      ms.textContent = T.msg_model_loading;
+      asrPromise = (async function () {
+        var m = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
+        var asr = await m.pipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
+          progress_callback: function (p) {
+            if (p.status === 'progress' && p.progress != null) {
+              ms.textContent = T.msg_model_loading + ' ' + Math.round(p.progress) + '%';
+            }
+          }
+        });
+        ms.textContent = T.msg_model_ready;
+        return asr;
+      })();
+      asrPromise.catch(function (e) {
+        document.getElementById('model-state').textContent = T.err_asr + (e.message || e);
+        asrPromise = null;
+      });
+    }
+    return asrPromise;
+  }
+
+  // Запись (webm/mp4) -> числа 16 кГц, как нужно Whisper
+  async function blobToFloat32(blob) {
+    var buf = await blob.arrayBuffer();
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx = new AC({ sampleRate: 16000 });
+    var audio = await ctx.decodeAudioData(buf);
+    ctx.close();
+    return audio.getChannelData(0);
+  }
+
+  async function recognize(blob) {
+    var rs = document.getElementById('rec-state');
+    rs.textContent = T.state_listening;
+    recBtn.disabled = true;
+    try {
+      var asr = await loadAsr();
+      var audio = await blobToFloat32(blob);
+      var t0 = performance.now();
+      var out = await asr(audio, { language: 'russian', task: 'transcribe' });
+      var sec = ((performance.now() - t0) / 1000).toFixed(1);
+      document.getElementById('heard').textContent = (out.text || '').trim() || '—';
+      document.getElementById('heard-box').style.display = 'block';
+      rs.textContent = '⏱ ' + sec + ' c';
+    } catch (e) {
+      rs.textContent = T.err_asr + (e.message || e);
+    }
+    recBtn.disabled = false;
+  }
 </script>
 </body>
 </html>
