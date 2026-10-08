@@ -1,0 +1,12 @@
+[
+  { "id": 1,  "word": "ракета",  "sound": "Р", "position": "начало",  "pic": "🚀",   "accepted": [] },
+  { "id": 2,  "word": "рука",    "sound": "Р", "position": "начало",  "pic": "✋",   "accepted": ["ручка"] },
+  { "id": 3,  "word": "гора",    "sound": "Р", "position": "середина","pic": "⛰️",  "accepted": ["горка"] },
+  { "id": 4,  "word": "корова",  "sound": "Р", "position": "середина","pic": "🐄",   "accepted": ["коровка"] },
+  { "id": 5,  "word": "сыр",     "sound": "Р", "position": "конец",   "pic": "🧀",   "accepted": [] },
+  { "id": 6,  "word": "шар",     "sound": "Ш", "position": "начало",  "pic": "🎈",   "accepted": ["шарик"] },
+  { "id": 7,  "word": "шапка",   "sound": "Ш", "position": "начало",  "img": "images/shapka.png", "accepted": ["шапочка"] },
+  { "id": 8,  "word": "машина",  "sound": "Ш", "position": "середина","pic": "🚗",   "accepted": ["машинка"] },
+  { "id": 9,  "word": "уши",     "sound": "Ш", "position": "середина","pic": "👂👂", "accepted": ["ушки"] },
+  { "id": 10, "word": "мышь",    "sound": "Ш", "position": "конец",   "pic": "🐭",   "accepted": ["мышка"] }
+]
